@@ -1,0 +1,280 @@
+##################################################################
+#misc.ka                                                         
+#Created by ^Nemisis^@EFNet                                      
+#nemisis@intercarve.net                                          
+#Dedicated to illusionz and Purpleguy who wouldn't stop bitching 
+#about stupid minute addons.                                     
+#Two Random Quote Insertions:                                    
+#   <illusionz> pg! <illusionz> long time no see                 
+#   <Purpleguy> illusionz: yeah, i've been beating up midgets :D 
+#   <illusionz> leave troj and his family alone you big brute    
+#                                                                
+#   ωνω ^Nemisis^ was kicked off #classicgamez by Purpleguy      
+#        (for being the son of five men, you win a kick too)     
+#
+#Included within misc.ka:
+#   flashfxp stats
+#             \-dunno, people just wanted it.
+#   power alias 
+#             \-for the ones who want to use the penis analogy
+#   fixed uptime procedure
+#             \-includes fixed Windows XP OS reporting
+#   on text highlights
+#             \-because /hilite sounds like work
+#   space free per mounted drive
+#             \-if I didn't add it, I forfeited my life.
+#   modified kMOTD proc
+#             \-kMOTD is dead, no need for errors
+#  google search
+#             \-GOOOOOGLE!
+#Changelog:
+#   v.70
+#       added /traceroute (this is beta)
+#   v.60 
+#       cleaned-up the dll a little bit
+#   v.55
+#       Added FlashFXP stat reporting
+#   v.50
+#       Added google search support.
+#   v.46
+#       Modified the kMOTD to not actually connect and display
+#       the error.  If perchance it ever does return, *poof*.
+#   v.45
+#       Initial release of misc.dll, employs solely the hd_free
+#       procedure, that is all, until later.
+#   v.36
+#       Added custom hilites alias, /hl, which ironically enough
+#       does exist in kano, just never noticed it, oh well, I'll
+#       keep this proc as a shorthand version of doing it, quicker
+#       and cleaner.
+#   v.34b
+#       First initial release, la la la!
+##################################################################
+# Hooks: #
+on load {
+    if {![info exists [get_cookie hilite(words)]]} { set_cookie hilite(words) {} }
+    if {[catch [load addons/misc.dll]] == 0} {   
+        addecho "misc.ka, with added spunk!"
+    } else {
+        echo "You probably want to get misc.dll for misc.ka!"
+    }
+}
+
+# Procs: #
+
+proc flashfxp {args} {
+            if {[string match [get_cookie flashfxppath] ""]} {
+                set_cookie flashfxppath [prompt "Enter a Path" "FlashFXP's Directory:" ""]
+            }
+            if {![file exists [file join [get_cookie flashfxppath] Stats.dat]]} {
+                echo "Reset FlashFXP path (/flashfxp -c), Stats.dat not found!" ; return
+            }
+            set statsdown 0
+            set statsnum 0
+            set statsup 0
+            catch {set sock [open [file join [get_cookie flashfxppath] Stats.dat]]}
+            while {[gets $sock line]} {
+                if {[regexp "^FD=(\[0-9\.]+)\$" $line {} num]} { set statsdown $num } \
+                elseif {[regexp "^TC=(\[0-9\.]+)\$" $line {} num]} { set statsnum $num } \
+                elseif {[regexp "^FU=(\[0-9\.]+)\$" $line {} num]} { set statsup $num } \
+                elseif {[regexp "^LR=(\[0-9\.]+)\$" $line {} num]} { set mysterynum $num } \
+                elseif {[regexp "^\\$" $line]} { break }
+            }
+            catch {close $sock}
+            set units [list "b" "KB" "MB" "GB" "TB"]
+            set sdc 0
+            set suc 0
+            set tcl_precision 2
+            # if you know what the LR signifies, drop me an e-mail, from now until it is resolved though,
+            # we shall simply refer to it as the 'mystery number'.
+            while {[expr {$statsdown / 1024.}] > 10} { set statsdown [expr {$statsdown / 1024.}] ; incr sdc}
+            while {[expr {$statsup / 1024.}] > 10} { set statsup [expr {$statsup / 1024.}] ; incr suc}
+            set tcl_precision 17
+            return "FlashFXP Status: Total Files: $statsnum Leeched: $statsdown [lindex $units $sdc] Uploaded: $statsup [lindex $units $sdc] "     
+            complete
+             
+}
+
+proc google {args} {
+    set query [list [formatQuery [args]]]
+    set sock [socket -async  www.google.com 80]
+    puts $sock "GET /search?hl=en&q=$query HTTP/1.0"
+    puts $sock "User-Agent: misc.ka google browser"
+    puts $sock ""
+    /query .Google.
+    window restore query .Google.
+    window set_title "Google results" .Google.
+    flush $sock
+    set res [read $sock]
+     puts stdout [regexp "<td>(.*)</td>" $res data]
+     echo $data
+    close $sock    
+}
+proc traceroute {args} {
+    set sock [eval exec [list tracert.exe $args]]
+    /query .Google.
+    window restore query .tracert.
+    window set_title "tracert results" .tracert.
+    echo $sock
+}
+proc highlite {args} {
+    set arg [lindex [split [args]] 0] ; set word [string trim [lindex [split [args]] 1]]
+    switch -- $arg {
+        -l { echo "[get_cookie hilite(words)]" ; if {[get_cookie \
+             hilite(words)] == ""} { echo "No words to highlite." } }
+        -a { if {[string match $word ""]} { echo "Please enter a word."
+             # without this, you would flood yourself off 
+             } else { foreach a [get_cookie hilite(words)] { if {[string match $a $word]} {
+             echo "Word $word already exists, ignoring." ; return } } }
+             set a [get_cookie hilite(words)] ; set_cookie hilite(words) \
+             [lappend a $word] ; echo "Added word $word" } 
+        -r { set tmpCookie [get_cookie hilite(words)] ; set a [lsearch $tmpCookie $word]
+             if {$a > -1} { set_cookie hilite(words) [lreplace $tmpCookie $a $a] ; echo "Word $word\
+             removed." } else { echo "Word $word not found!" } }
+        default { echo "Usage: /hl -l|a|r ?word?" }
+    }
+} 
+
+proc grab_motd {{x ""} {host ""} {port 5051}} {
+    global env
+    if {$x == "check"} return
+    if {$host == ""} {set host [get_cookie kmotdserv motd.kano.net]}
+    if {![FALC_isip $host]} {
+    set orig $host
+    if {![cachedlookup $host]} {
+        #do nothing
+    }
+    set host [dnslookup $host]
+    if {$host == $orig} {
+       #do nothing
+        set host 207.88.6.20
+    }
+    }
+    catch {close $env(KM\x4fTD)}
+    if {$x == "" && ![get_cookie quietmotd 0]} {
+     #do nothing
+    }
+    if {![catch {socket -async $host $port} x]} {
+    #do nothing
+    fconfigure $x -buffering line -blocking 0
+    fileevent $x readable "kanomotd $x"
+    set env(KM\x4fTD) $x
+    if {[info exists env(KM\x4fTDQ)]} {
+        foreach i $env(KM\x4fTDQ) {
+        catch {puts $x $i}
+        }
+        unset env(KM\x4fTDQ)
+    }
+    } elseif {![get_cookie quietmotd 0]} {
+    global errorCode
+    #do nothing
+    }
+}
+    
+proc getOS {{type short}} {
+    global tcl_platform
+    set x $tcl_platform(os)
+    set y $tcl_platform(osVersion)
+    if {$x == "Windows 95"} {
+        if {$y == 4} {
+            return win95
+        } elseif {$y == 4.1} {
+            return win98
+        } elseif {$y == 4.9} {
+            return millennium
+        } else {return win$y}
+    } elseif {$x == "Windows NT"} {
+        if {$y < 5.0} {
+            return winnt
+        } elseif {$y == 5.1} {
+            return winxp
+        } else {return win2k}
+    } else {
+    return [string tolower $x$y]
+    }
+}
+
+# Aliases: #
+alias google {
+    if {[args] == ""} {
+        echo "Enter a damn search string."
+        return
+    }
+    google [args]
+    complete
+}
+alias traceroute {
+    if {[args] == ""} {
+        echo "Enter a damn ip/host/options."
+        return
+    }
+    traceroute [args]
+    complete
+}
+alias space {
+   switch -- [args] {
+        -v {say "[hd_free]"}
+        default {echo "[hd_free]"}
+    }
+    complete
+}
+alias df {
+   switch -- [args] {
+        -v {say "[hd_free]"}
+        default {echo "[hd_free]"}
+    }
+    complete
+}
+alias flashfxp {
+   switch -- [args] {         -c {  set_cookie flashfxppath [prompt "Enter a Path" "FlashFXP's Directory:" ""] }
+        -h {  echo "use /help flashfxp" }
+        -v {say "[flashfxp]"}
+        default {echo "[flashfxp]"}
+    }
+    complete
+}
+    
+alias power {
+    set total 0 ; set oppedchannels 0
+    foreach channel [channels] {
+        if {[isop [my_nick] $channel]} {             incr oppedchannels 
+            set total [expr {$total+[llength [chanlist $channel]]-1}] 
+        }
+    }
+    switch -- [args] {
+        -v {say "I am currently opped in $oppedchannels out of [llength [channels]] channels, comprising of $total people whom I control had I not been a lazy bastard and chose to do this instead."}
+        default {echo "You are currently opped in $oppedchannels out of [llength [channels]] channels, comprising of $total people whom you control"}
+    }
+    complete
+}
+
+alias hl {
+    highlite [args]
+    complete
+}
+
+#To-do, need to find out how to capture server version reply as var data.
+#If perchance to run across the method to do so, don't hesitate to
+#Message ^Nemisis^
+#alias topic {
+#    set tchan [lindex [args] 0]
+#    if {[regexp {^(.*) KV$} [raw_args] junk content]} {
+#    /quote topic :$content
+#    complete
+#    return
+#    }
+#    set ra [raw_args]
+#    set chan [ret [lindex [args] 0]]
+#    if{![info exists [get_cookie serverVersion([lindex [server] 0]]} {
+#        set_cookie serverVersion([lindex [server] 0]) {/quote version}
+#    }
+#}
+
+kaddhelp flashfxp "Display FlashFXP Status." "/flashfxp ?-v?-c?" "FlashFXP Stats"
+kaddhelp google "Conduct a Google search from XiRCON." "/google searchstring" "Google Search"
+kaddhelp space "Shows mounted drive usage, exceptions: removable media.  Use -v for verbose display." "/space ?-v?" "Drive Usage" "/df"
+kaddhelp df "Alias to /space, read /space's help for usage." "/df ?-v?" "Drive Usage" "/space"
+kaddhelp hl "Add/Remove a new highlite; use /hl -l to list all available highlites (besides default nick), -r word to remove a word and -a word to add a new word. *Note*: A form of kano highliting must be active and only single words are supported at this stage." "/hl -|a|r|l ?word?" "Custom Highlites"
+kaddhelp power "Echoes total number of people per channel you have 'power' over (which we know is rarely the case), use the -v flag for verbose display." "/power ?-v?" "Power Crap"
+addecho "[kano] --(misc.ka)-- version .45 because it sucks!"
+addname misc.ka 
